@@ -41,7 +41,7 @@ setup(
         "opencv-python>=4.8.1.78",
         "Pillow>=10.1.0",
         "albumentations>=1.3.1",
-        "pytorch-grad-cam>=1.4.8",
+        "grad-cam>=1.4.8",
         "matplotlib>=3.8.2",
         "numpy>=1.24.3",
         "pandas>=2.1.4",

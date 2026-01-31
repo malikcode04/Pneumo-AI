@@ -17,7 +17,6 @@ scikit-image>=0.22.0
 
 # Explainability & Visualization
 grad-cam>=1.4.8
-pytorch-grad-cam>=1.4.8
 matplotlib>=3.8.2
 seaborn>=0.13.0
 plotly>=5.18.0
