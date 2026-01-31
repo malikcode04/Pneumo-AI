@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Streamlit Web Application
+  streamlit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: pneumo-ai-ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - ../checkpoints:/app/checkpoints
+      - ../data:/app/data
+      - ../logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    restart: unless-stopped
+    networks:
+      - pneumo-net
+
+  # FastAPI REST API (optional)
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: pneumo-ai-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../checkpoints:/app/checkpoints
+      - ../data:/app/data
+      - ../logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: uvicorn app.api.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    networks:
+      - pneumo-net
+
+networks:
+  pneumo-net:
+    driver: bridge
+
+volumes:
+  checkpoints:
+  data:
+  logs:

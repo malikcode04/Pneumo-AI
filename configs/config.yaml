@@ -1,0 +1,233 @@
+# ═══════════════════════════════════════════════════════════
+# PNEUMONIA DETECTION SYSTEM - CONFIGURATION
+# ═══════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────
+# DATA CONFIGURATION
+# ───────────────────────────────────────────────────────────
+data:
+  # Dataset paths
+  train_csv: "data/train.csv"
+  val_csv: "data/val.csv"
+  test_csv: "data/test.csv"
+  image_dir: "data/images"
+  
+  # Class mapping
+  classes:
+    0: "Normal"
+    1: "Bacterial Pneumonia"
+    2: "Viral Pneumonia"
+  
+  # Image preprocessing
+  image_size: 224
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
+  
+  # Data split ratios
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  
+  # Augmentation settings
+  augmentation:
+    rotation_limit: 15
+    shift_limit: 0.1
+    scale_limit: 0.1
+    brightness_limit: 0.2
+    contrast_limit: 0.2
+    clahe_clip_limit: 2.0
+    horizontal_flip: false  # Medical images should not be flipped
+
+# ───────────────────────────────────────────────────────────
+# MODEL CONFIGURATION
+# ───────────────────────────────────────────────────────────
+model:
+  # Architecture
+  architecture: "densenet121"  # Options: densenet121, efficientnet_b4
+  pretrained: true
+  num_classes: 3
+  
+  # Dropout for uncertainty estimation
+  dropout_rate: 0.3
+  mc_dropout_passes: 20
+  
+  # Ensemble settings
+  use_ensemble: false
+  ensemble_models: ["densenet121", "efficientnet_b4"]
+  ensemble_weights: [0.6, 0.4]
+
+# ───────────────────────────────────────────────────────────
+# TRAINING CONFIGURATION
+# ───────────────────────────────────────────────────────────
+training:
+  # Hyperparameters
+  batch_size: 32
+  num_epochs: 50
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  
+  # Optimizer
+  optimizer: "adam"  # Options: adam, adamw, sgd
+  
+  # Learning rate scheduler
+  scheduler:
+    type: "reduce_on_plateau"  # Options: reduce_on_plateau, cosine, step
+    patience: 5
+    factor: 0.5
+    min_lr: 0.000001
+  
+  # Loss function
+  loss:
+    type: "focal"  # Options: focal, cross_entropy, weighted_ce
+    focal_alpha: [1.0, 2.0, 2.0]  # Higher weight for pneumonia classes
+    focal_gamma: 2.0
+    use_class_weights: true
+  
+  # Mixed precision training
+  use_amp: true
+  
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 10
+    monitor: "val_recall"  # Primary metric
+    mode: "max"
+    min_delta: 0.001
+  
+  # Checkpointing
+  checkpoint:
+    save_best_only: true
+    monitor: "val_recall"
+    mode: "max"
+    save_dir: "checkpoints"
+
+# ───────────────────────────────────────────────────────────
+# CLINICAL CONFIGURATION
+# ───────────────────────────────────────────────────────────
+clinical:
+  # Decision thresholds (post-calibration)
+  thresholds:
+    normal: 0.5
+    bacterial: 0.3  # Lower threshold for higher recall
+    viral: 0.3
+  
+  # Target metrics
+  target_recall: 0.95  # Minimum acceptable recall for pneumonia
+  acceptable_precision: 0.80
+  
+  # Triage flags
+  triage:
+    high_uncertainty_threshold: 0.3  # Entropy threshold
+    low_confidence_threshold: 0.6
+    priority_review_classes: [1, 2]  # Pneumonia classes
+  
+  # Quality control
+  quality_control:
+    enabled: true
+    min_quality_score: 0.5
+    check_rotation: true
+    check_exposure: true
+    check_clipping: true
+
+# ───────────────────────────────────────────────────────────
+# EXPLAINABILITY CONFIGURATION
+# ───────────────────────────────────────────────────────────
+explainability:
+  # Grad-CAM settings
+  gradcam:
+    target_layer: "features.denseblock4"  # For DenseNet-121
+    use_gradcam_plus_plus: true
+    use_lung_masking: true
+    smooth_heatmap: true
+    colormap: "jet"
+  
+  # Uncertainty estimation
+  uncertainty:
+    method: "mc_dropout"  # Options: mc_dropout, ensemble
+    num_samples: 20
+    calculate_entropy: true
+
+# ───────────────────────────────────────────────────────────
+# INFERENCE CONFIGURATION
+# ───────────────────────────────────────────────────────────
+inference:
+  # Model loading
+  checkpoint_path: "checkpoints/best_recall.pth"
+  device: "cuda"  # Options: cuda, cpu, auto
+  
+  # Test-time augmentation
+  use_tta: false
+  tta_transforms: 5
+  
+  # Batch inference
+  batch_size: 16
+  num_workers: 4
+  
+  # Output format
+  output_format: "json"  # Options: json, csv, pdf
+  save_heatmaps: true
+  heatmap_dir: "outputs/heatmaps"
+
+# ───────────────────────────────────────────────────────────
+# WEB APPLICATION CONFIGURATION
+# ───────────────────────────────────────────────────────────
+app:
+  # Streamlit settings
+  streamlit:
+    title: "🫁 Pneumo AI"
+    theme: "medical"  # Custom medical theme
+    max_upload_size: 10  # MB
+    show_confidence: true
+    show_uncertainty: true
+    enable_pdf_export: true
+  
+  # FastAPI settings
+  api:
+    host: "0.0.0.0"
+    port: 8000
+    reload: false
+    workers: 4
+    cors_origins: ["*"]
+    rate_limit: 100  # requests per minute
+
+# ───────────────────────────────────────────────────────────
+# LOGGING CONFIGURATION
+# ───────────────────────────────────────────────────────────
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  format: "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+  log_dir: "logs"
+  rotation: "500 MB"
+  retention: "30 days"
+  
+  # TensorBoard
+  tensorboard:
+    enabled: true
+    log_dir: "logs/tensorboard"
+  
+  # Weights & Biases
+  wandb:
+    enabled: false
+    project: "pneumonia-detection"
+    entity: "medical-ai"
+
+# ───────────────────────────────────────────────────────────
+# DEPLOYMENT CONFIGURATION
+# ───────────────────────────────────────────────────────────
+deployment:
+  # Docker settings
+  docker:
+    base_image: "python:3.10-slim"
+    expose_ports: [8501, 8000]
+    
+  # ONNX export
+  onnx:
+    export_path: "models/pneumonia_detector.onnx"
+    opset_version: 14
+    optimize: true
+    
+  # Resource limits
+  resources:
+    cpu_limit: 4
+    memory_limit: "8GB"
+    gpu_enabled: false
