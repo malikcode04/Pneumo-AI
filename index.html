@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pneumo AI - Clinical Radiology</title>
+    <style>
+        :root {
+            --primary: #00d4ff;
+            --bg: #0a0c10;
+            --text: #e0e0e0;
+        }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            text-align: center;
+        }
+        .container {
+            padding: 40px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            backdrop-filter: blur(10px);
+            max-width: 600px;
+            box-shadow: 0 0 50px rgba(0, 212, 255, 0.1);
+        }
+        h1 {
+            color: var(--primary);
+            font-size: 3rem;
+            margin-bottom: 10px;
+            letter-spacing: -1px;
+        }
+        p {
+            font-size: 1.2rem;
+            color: #a0a0a0;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background: var(--primary);
+            color: #000;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 50px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+        }
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 212, 255, 0.5);
+            background: #fff;
+        }
+        .footer {
+            margin-top: 50px;
+            font-size: 0.9rem;
+            color: #555;
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container pulse">
+        <h1>🫁 Pneumo AI</h1>
+        <p>Advanced clinical-grade AI system for Pneumonia triage from Chest X-Rays. Optimized for production-level sensitivity and clinical trust.</p>
+        
+        <div style="margin-top: 20px;">
+            <a href="https://streamlit.io/sharing" class="btn">🚀 Launch Clinical UI</a>
+        </div>
+        
+        <p style="font-size: 0.9rem; margin-top: 20px;">
+            <span style="color: var(--primary);">●</span> API System Active 
+            <br><code style="background: #1a1d29; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem;">Endpoint: /api/predict</code>
+        </p>
+    </div>
+    
+    <div class="footer">
+        Clinical Decision Support System | Version 1.1.0
+    </div>
+</body>
+</html>
