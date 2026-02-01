@@ -457,13 +457,18 @@ def render_analysis_view(predictor):
                     st.image(result['heatmap_overlay'], use_column_width=True)
                 with c2:
                     st.markdown("#### Clinical Metrics")
-                    st.markdown(f"""
                     <div class="metric-card">
                         <p><strong>Sensitivity:</strong> {result['clinical_metrics']['sensitivity']}</p>
                         <p><strong>Specificity:</strong> {result['clinical_metrics']['specificity']}</p>
                         <p><strong>Uncertainty:</strong> {result['uncertainty']['entropy']:.3f}</p>
                     </div>
                     """, unsafe_allow_html=True)
+
+                    st.markdown("#### Detailed Probability Analysis")
+                    probs = result['probabilities']
+                    st.write(f"**Normal:** {probs.get('Normal', 0):.1%}")
+                    st.write(f"**Bacterial Pneumonia:** {probs.get('Bacterial Pneumonia', 0):.1%}")
+                    st.write(f"**Viral Pneumonia:** {probs.get('Viral Pneumonia', 0):.1%}")
                     
                     # SAVE TO DB AUTOMATICALLY
                     heatmap_img = Image.fromarray(result['heatmap_overlay'])
