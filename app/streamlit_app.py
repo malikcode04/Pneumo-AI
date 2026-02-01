@@ -457,10 +457,16 @@ def render_analysis_view(predictor):
                     st.image(result['heatmap_overlay'], use_column_width=True)
                 with c2:
                     st.markdown("#### Clinical Metrics")
+                    
+                    sens = result['clinical_metrics']['sensitivity']
+                    spec = result['clinical_metrics']['specificity']
+                    entr = result['uncertainty']['entropy']
+
+                    st.markdown(f"""
                     <div class="metric-card">
-                        <p><strong>Sensitivity:</strong> {result['clinical_metrics']['sensitivity']}</p>
-                        <p><strong>Specificity:</strong> {result['clinical_metrics']['specificity']}</p>
-                        <p><strong>Uncertainty:</strong> {result['uncertainty']['entropy']:.3f}</p>
+                        <p><strong>Sensitivity:</strong> {sens}</p>
+                        <p><strong>Specificity:</strong> {spec}</p>
+                        <p><strong>Uncertainty:</strong> {entr:.3f}</p>
                     </div>
                     """, unsafe_allow_html=True)
 
