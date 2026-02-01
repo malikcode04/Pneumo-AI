@@ -42,6 +42,10 @@ if "current_view" not in st.session_state:
     st.session_state.current_view = "Dashboard"
 if "sidebar_state" not in st.session_state:
     st.session_state.sidebar_state = "expanded"
+if "analysis_result" not in st.session_state:
+    st.session_state.analysis_result = None
+if "last_analysis_image" not in st.session_state:
+    st.session_state.last_analysis_image = None
 
 # Page configuration
 st.set_page_config(
@@ -333,6 +337,10 @@ def render_analysis_view(predictor):
         patient_placeholder = st.empty()
         patient_placeholder.info("Waiting for image...")
 
+    if not uploaded_file:
+        st.session_state.analysis_result = None
+        st.session_state.last_analysis_image = None
+
     if uploaded_file:
         # Process File
         with st.spinner("Processing Imaging Data..."):
@@ -383,13 +391,23 @@ def render_analysis_view(predictor):
                 try:
                     image_np = np.array(image_source)
                     result = predictor.predict(image_np, return_heatmap=True)
+                    st.session_state.analysis_result = result
+                    st.session_state.last_analysis_image = image_source
                 except MedicalIntegrityError as e:
                     st.error(f"⚠️ Medical Integrity Check Failed: {str(e)}")
                     st.warning("Please upload a standard Chest X-ray image for analysis.")
+                    st.session_state.analysis_result = None
                     return
                 except Exception as e:
                     st.error(f"An unexpected error occurred: {str(e)}")
+                    st.session_state.analysis_result = None
                     return
+
+            # Persistent Display Logic
+            if st.session_state.analysis_result is not None:
+                result = st.session_state.analysis_result
+                image_source = st.session_state.last_analysis_image
+                
 
                 # Display Prediction Badge
                 st.markdown("---")
