@@ -213,7 +213,7 @@ def render_dashboard():
     """Doctor's Dashboard View."""
     st.markdown("# 📊 Doctor's Dashboard")
     
-    scans = get_all_scans()
+    scans = get_all_scans(st.session_state.username)
     
     # KPIs
     kpi1, kpi2, kpi3 = st.columns(3)
@@ -430,6 +430,7 @@ def render_analysis_view(predictor):
                         conf,
                         image_source,
                         heatmap_img,
+                        st.session_state.username,
                         notes="Auto-saved from inference"
                     )
                     st.success(f"✅ Record Saved to Dashboard (ID: {scan_id})")

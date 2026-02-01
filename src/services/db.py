@@ -30,12 +30,20 @@ def init_db():
                   confidence REAL, 
                   image_path TEXT,
                   heatmap_path TEXT,
-                  notes TEXT)''')
+                  notes TEXT,
+                  doctor_username TEXT)''')
+    
+    # Migration: Add doctor_username column if it doesn't exist
+    try:
+        c.execute("ALTER TABLE scans ADD COLUMN doctor_username TEXT")
+    except sqlite3.OperationalError:
+        # Column already exists
+        pass
     
     conn.commit()
     conn.close()
     
-def add_scan(patient_id, patient_name, diagnosis, confidence, original_image, heatmap_image, notes=""):
+def add_scan(patient_id, patient_name, diagnosis, confidence, original_image, heatmap_image, doctor_username, notes=""):
     """
     Saves scan metadata to DB and images to disk.
     Returns the scan ID.
@@ -55,21 +63,26 @@ def add_scan(patient_id, patient_name, diagnosis, confidence, original_image, he
     conn = sqlite3.connect(str(DB_PATH))
     c = conn.cursor()
     c.execute('''INSERT INTO scans 
-                 (patient_id, patient_name, scan_date, diagnosis, confidence, image_path, heatmap_path, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                 (patient_id, patient_name, scan_date, diagnosis, confidence, image_path, heatmap_path, doctor_username, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
               (patient_id, patient_name, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-               diagnosis, float(confidence), str(img_path), str(heat_path), notes))
+               diagnosis, float(confidence), str(img_path), str(heat_path), doctor_username, notes))
     conn.commit()
     scan_id = c.lastrowid
     conn.close()
     return scan_id
 
-def get_all_scans():
-    """Retrieve all scans."""
+def get_all_scans(doctor_username=None):
+    """Retrieve all scans, optionally filtered by doctor."""
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT * FROM scans ORDER BY scan_date DESC")
+    
+    if doctor_username:
+        c.execute("SELECT * FROM scans WHERE doctor_username = ? ORDER BY scan_date DESC", (doctor_username,))
+    else:
+        c.execute("SELECT * FROM scans ORDER BY scan_date DESC")
+        
     rows = [dict(row) for row in c.fetchall()]
     conn.close()
     return rows
