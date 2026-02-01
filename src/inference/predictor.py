@@ -280,18 +280,16 @@ class PneumoniaPredictor:
 
     def _validate_medical_integrity(self, image: np.ndarray) -> tuple:
         """
-        Validates if the image is a standard grayscale Chest X-ray.
+        Validates if the image is a standard grayscale Chest X-ray with lung anatomy.
         Returns (is_valid, reason)
         """
         # 1. Grayscale check
         if len(image.shape) == 3:
-            # Check if all channels are similar (genuine grayscale images saved as RGB)
             std_dev = np.std(image, axis=2).mean()
-            if std_dev > 15: # Not a grayscale image (likely color photo)
-                return False, "Image appears to be non-medical (Detected color profile, expected grayscale Chest X-ray)"
+            if std_dev > 15: 
+                return False, "Image appears to be non-medical (Color profile detected, expected grayscale Chest X-ray)"
         
         # 2. Histogram variance check (Diagnostic quality)
-        # X-rays have a specific distribution. Very flat histograms are usually just noise or flat objects.
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if len(image.shape) == 3 else image
         if np.std(gray) < 25:
             return False, "Low diagnostic information (Image is too flat or contains mostly noise)"
@@ -301,5 +299,17 @@ class PneumoniaPredictor:
         ratio = h / w
         if ratio < 0.6 or ratio > 1.7:
              return False, "Non-standard anatomy (Aspect ratio incompatible with standard Chest X-ray views)"
+
+        # 4. LUNG DETECTION (Critical for Pitch: Rejects bone fractures)
+        # We use the segmenter to see if there is any lung-like structure
+        try:
+            mask = self.lung_segmenter.segment(image)
+            lung_area = np.sum(mask > 0) / (mask.shape[0] * mask.shape[1])
+            # Standard chest X-rays have at least 15-20% lung area. 
+            # Bone fractures or hands will have 0% or very fragmented area.
+            if lung_area < 0.12:
+                return False, "Anatomy Mismatch: No significant lung structures detected. System is calibrated for Chest X-rays only."
+        except:
+            pass # Fallback to other checks if segmenter fails
              
         return True, "Valid Integrity"

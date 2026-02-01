@@ -16,22 +16,21 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import importlib
+import src.services.db
+import src.inference.predictor
+import src.inference
+import src.utils.report_gen
+
+importlib.reload(src.services.db)
+importlib.reload(src.inference.predictor)
+importlib.reload(src.inference)
+importlib.reload(src.utils.report_gen)
+
 from src.inference import PneumoniaPredictor, MedicalIntegrityError
 from src.utils import Config
 from src.utils.dicom_handler import read_dicom
 from src.services.auth import init_auth, check_credentials, create_user
-
-# HOTFIX: Force reload modules to ensure new functions are picked up
-import importlib
-import src.utils.report_gen
-import src.services.db
-import src.inference.predictor
-import src.inference
-importlib.reload(src.utils.report_gen)
-importlib.reload(src.services.db)
-importlib.reload(src.inference.predictor)
-importlib.reload(src.inference)
-
 from src.utils.report_gen import create_pdf_report
 from src.services.db import init_db, add_scan, get_all_scans, delete_scan, update_scan
 
