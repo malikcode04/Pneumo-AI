@@ -16,6 +16,10 @@ from .gradcam import create_gradcam, apply_lung_mask_to_cam
 from .uncertainty import UncertaintyEstimator
 
 
+class MedicalIntegrityError(Exception):
+    """Raised when the uploaded image is not a valid or high-quality Chest X-ray."""
+    pass
+
 class PneumoniaPredictor:
     """Main predictor for pneumonia detection."""
     
@@ -87,6 +91,11 @@ class PneumoniaPredictor:
         # Load and preprocess image
         original_image = self._load_image(image)
         
+        # 1. Medical Integrity Validation (Critical for Pitch)
+        is_valid, reason = self._validate_medical_integrity(original_image)
+        if not is_valid:
+            raise MedicalIntegrityError(reason)
+            
         # Quality control
         quality_score, quality_warnings = self.quality_control.check_quality(original_image)
         
@@ -98,8 +107,21 @@ class PneumoniaPredictor:
         with torch.no_grad():
             output = self.model(input_tensor)
             probabilities = F.softmax(output, dim=1)
-            predicted_class = probabilities.argmax(dim=1).item()
-            confidence = probabilities[0, predicted_class].item()
+            
+            # Sort probabilities to detect ties
+            sorted_probs, sorted_indices = torch.sort(probabilities, descending=True)
+            top1_prob = sorted_probs[0, 0].item()
+            top2_prob = sorted_probs[0, 1].item()
+            
+            predicted_class = sorted_indices[0, 0].item()
+            confidence = top1_prob
+            
+            # Detect Clinical Tie (Competitive Predictions)
+            is_indeterminate = False
+            # If Bacterial (1) and Viral (2) are within 15% of each other, it's a diagnostic challenge
+            if (sorted_indices[0, 0] in [1, 2]) and (sorted_indices[0, 1] in [1, 2]):
+                if (top1_prob - top2_prob) < 0.15:
+                    is_indeterminate = True
         
         # Uncertainty estimation
         uncertainty_metrics = {}
@@ -162,12 +184,13 @@ class PneumoniaPredictor:
             },
             'heatmap': heatmap,
             'heatmap_overlay': heatmap_overlay,
-            'original_image': original_image
+            'original_image': original_image,
+            'is_indeterminate': is_indeterminate
         }
         
         # Calculate clinical metrics
         result['clinical_metrics'] = self._calculate_clinical_metrics(
-            predicted_class, confidence
+            predicted_class, confidence, is_indeterminate
         )
         
         return result
@@ -194,7 +217,8 @@ class PneumoniaPredictor:
     def _calculate_clinical_metrics(
         self,
         predicted_class: int,
-        confidence: float
+        confidence: float,
+        is_indeterminate: bool = False
     ) -> Dict[str, str]:
         """Calculate clinical interpretation metrics."""
         # For demonstration - in production, these would be calibrated from validation set
@@ -218,29 +242,64 @@ class PneumoniaPredictor:
             'specificity': specificity,
             'ppv': ppv,
             'npv': npv,
-            'interpretation': self._get_interpretation(predicted_class, confidence)
+            'interpretation': self._get_interpretation(predicted_class, confidence, is_indeterminate)
         }
     
-    def _get_interpretation(self, predicted_class: int, confidence: float) -> str:
+    def _get_interpretation(self, predicted_class: int, confidence: float, is_indeterminate: bool = False) -> Dict[str, str]:
         """Get clinical interpretation with structured categorization."""
         class_name = self.class_names[predicted_class]
         
-        if confidence > 0.9:
+        if is_indeterminate:
+            category = "Indeterminate Pattern"
+            level = "low"
+            text = "Pneumonia Detected (Pattern features intermediate between Bacterial & Viral)"
+        elif confidence > 0.9:
             category = "High Accuracy"
             level = "very high"
+            text = f"{class_name} ({category})"
         elif confidence > 0.75:
             category = "Moderate Confidence"
             level = "high"
+            text = f"{class_name} ({category})"
         elif confidence > 0.6:
             category = "Low Confidence"
             level = "moderate"
+            text = f"{class_name} ({category})"
         else:
             category = "Uncertain / Review Required"
             level = "low"
+            text = f"{class_name} (Review Required)"
         
         return {
             "category": category,
             "level": level,
-            "text": f"{class_name} ({category})",
-            "confidence_display": f"{confidence:.1%}"
+            "text": text,
+            "confidence_display": f"{confidence:.1%}",
+            "is_indeterminate": is_indeterminate
         }
+
+    def _validate_medical_integrity(self, image: np.ndarray) -> tuple:
+        """
+        Validates if the image is a standard grayscale Chest X-ray.
+        Returns (is_valid, reason)
+        """
+        # 1. Grayscale check
+        if len(image.shape) == 3:
+            # Check if all channels are similar (genuine grayscale images saved as RGB)
+            std_dev = np.std(image, axis=2).mean()
+            if std_dev > 15: # Not a grayscale image (likely color photo)
+                return False, "Image appears to be non-medical (Detected color profile, expected grayscale Chest X-ray)"
+        
+        # 2. Histogram variance check (Diagnostic quality)
+        # X-rays have a specific distribution. Very flat histograms are usually just noise or flat objects.
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if len(image.shape) == 3 else image
+        if np.std(gray) < 25:
+            return False, "Low diagnostic information (Image is too flat or contains mostly noise)"
+            
+        # 3. Aspect Ratio Check
+        h, w = image.shape[:2]
+        ratio = h / w
+        if ratio < 0.6 or ratio > 1.7:
+             return False, "Non-standard anatomy (Aspect ratio incompatible with standard Chest X-ray views)"
+             
+        return True, "Valid Integrity"

@@ -16,8 +16,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models import create_densenet121
-from src.inference import PneumoniaPredictor
+from src.inference import PneumoniaPredictor, MedicalIntegrityError
 from src.utils import Config
 from src.utils.dicom_handler import read_dicom
 from src.services.auth import init_auth, check_credentials, create_user
@@ -381,14 +380,23 @@ def render_analysis_view(predictor):
             
             # Predict
             if st.button("🚀 Run AI Diagnosis", type="primary", use_container_width=True):
-                image_np = np.array(image_source)
-                result = predictor.predict(image_np, return_heatmap=True)
-                
+                try:
+                    image_np = np.array(image_source)
+                    result = predictor.predict(image_np, return_heatmap=True)
+                except MedicalIntegrityError as e:
+                    st.error(f"⚠️ Medical Integrity Check Failed: {str(e)}")
+                    st.warning("Please upload a standard Chest X-ray image for analysis.")
+                    return
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {str(e)}")
+                    return
+
                 # Display Prediction Badge
                 st.markdown("---")
                 label = result['predicted_label']
                 conf = result['confidence']
                 interpretation = result['clinical_metrics']['interpretation']
+                is_indeterminate = result.get('is_indeterminate', False)
                 
                 # Robustness check: Ensure interpretation is a dict (handles caching issues)
                 if isinstance(interpretation, str):
@@ -401,6 +409,7 @@ def render_analysis_view(predictor):
                 acc_category = interpretation.get('category', 'Status Unknown')
                 badge_class = "risk-high" if ("Pneumonia" in label and conf > 0.5) else "risk-low"
                 if "Normal" in label: badge_class = "risk-low"
+                if is_indeterminate: badge_class = "risk-medium" # Yellow/Warning color
                 
                 # Visual feedback for high accuracy
                 if acc_category == "High Accuracy":
@@ -412,7 +421,16 @@ def render_analysis_view(predictor):
                         </div>
                     """, unsafe_allow_html=True)
 
-                st.markdown(f'<div class="risk-badge {badge_class}">{label} ({interpretation.get("category", "N/A")} - {conf:.1%})</div>', unsafe_allow_html=True)
+                if is_indeterminate:
+                    st.markdown(f"""
+                        <div style="padding: 15px; border-radius: 10px; background: rgba(255, 193, 7, 0.1); border: 1px solid #ffc107; margin-bottom: 20px;">
+                            <h3 style="color: #ffc107; margin: 0;">🔬 {acc_category}</h3>
+                            <p style="color: #e0e0e0; margin: 10px 0 0 0;">{interpretation.get('text')}</p>
+                            <small style="color: #a0a0a0;">Reason: AI model detected features overlapping both Bacterial and Viral patterns. Manual differential diagnosis via PCR or Sputum culture is recommended.</small>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="risk-badge {badge_class}">{label} ({interpretation.get("category", "N/A")} - {conf:.1%})</div>', unsafe_allow_html=True)
                 
                 # Visuals
                 c1, c2, c3 = st.columns(3)
