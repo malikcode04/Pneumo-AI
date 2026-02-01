@@ -27,7 +27,8 @@ importlib.reload(src.inference.predictor)
 importlib.reload(src.inference)
 importlib.reload(src.utils.report_gen)
 
-from src.inference.predictor import PneumoniaPredictor, MedicalIntegrityError
+from src.inference.exceptions import MedicalIntegrityError
+from src.inference.predictor import PneumoniaPredictor
 from src.utils import Config
 from src.utils.dicom_handler import read_dicom
 from src.services.auth import init_auth, check_credentials, create_user

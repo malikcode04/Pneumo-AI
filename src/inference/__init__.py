@@ -1,8 +1,5 @@
-"""Inference package."""
-
-from .gradcam import GradCAMPlusPlus, create_gradcam, apply_lung_mask_to_cam
-from .uncertainty import UncertaintyEstimator, calculate_calibration_metrics
-from .predictor import PneumoniaPredictor, MedicalIntegrityError
+from .predictor import PneumoniaPredictor
+from .exceptions import MedicalIntegrityError
 
 __all__ = [
     'GradCAMPlusPlus',

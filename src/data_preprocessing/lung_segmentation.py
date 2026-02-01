@@ -79,32 +79,48 @@ class SimpleLungSegmenter:
     def get_lung_bbox(self, mask: np.ndarray) -> Tuple[int, int, int, int]:
         """
         Get bounding box of lung regions.
-        
-        Args:
-            mask: Binary lung mask
-            
-        Returns:
-            Tuple of (x, y, w, h)
         """
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
         if not contours:
-            # Return full image if no contours found
             h, w = mask.shape
             return 0, 0, w, h
-        
-        # Get bounding box of all contours
         x_min, y_min = float('inf'), float('inf')
         x_max, y_max = 0, 0
-        
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
             x_min = min(x_min, x)
             y_min = min(y_min, y)
             x_max = max(x_max, x + w)
             y_max = max(y_max, y + h)
-        
         return int(x_min), int(y_min), int(x_max - x_min), int(y_max - y_min)
+
+    def get_anatomical_features(self, image: np.ndarray, mask: np.ndarray) -> dict:
+        """
+        Extract anatomical features for integrity validation.
+        Detects Heart Silhouette and Rib textures.
+        """
+        features = {}
+        h, w = image.shape[:2]
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if len(image.shape) == 3 else image
+        mid_x = w // 2
+        
+        # Central cardiac region (Heart silhouette check)
+        cardiac_region = gray[int(h*0.3):int(h*0.7), int(mid_x - w*0.1):int(mid_x + w*0.1)]
+        features['cardiac_brightness'] = np.mean(cardiac_region) if cardiac_region.size > 0 else 0
+        
+        # Rib Frequency (Vertical gradient analysis)
+        roi = gray[int(h*0.2):int(h*0.8), int(w*0.2):int(w*0.8)]
+        sobel_y = cv2.Sobel(roi, cv2.CV_64F, 0, 1, ksize=3)
+        features['vertical_gradient_variance'] = np.var(sobel_y)
+        
+        # Symmetry
+        left_half = mask[:, :mid_x]
+        right_half = mask[:, mid_x:]
+        l_area = np.sum(left_half > 0)
+        r_area = np.sum(right_half > 0)
+        features['symmetry_ratio'] = min(l_area, r_area) / max(l_area, r_area + 1e-6)
+        
+        return features
 
 
 class QualityControl:

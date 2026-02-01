@@ -16,9 +16,7 @@ from .gradcam import create_gradcam, apply_lung_mask_to_cam
 from .uncertainty import UncertaintyEstimator
 
 
-class MedicalIntegrityError(Exception):
-    """Raised when the uploaded image is not a valid or high-quality Chest X-ray."""
-    pass
+from .exceptions import MedicalIntegrityError
 
 class PneumoniaPredictor:
     """Main predictor for pneumonia detection."""
@@ -281,31 +279,40 @@ class PneumoniaPredictor:
     def _validate_medical_integrity(self, image: np.ndarray) -> tuple:
         """
         Validates if the image is a standard grayscale Chest X-ray with bilateral lung anatomy.
-        Returns (is_valid, reason)
+        Uses background-ratio, aspect-ratio, and bilateral symmetry checks.
         """
-        # 1. Grayscale check
+        # 1. Grayscale & Image Quality Check
         if len(image.shape) == 3:
             std_dev = np.std(image, axis=2).mean()
             if std_dev > 15: 
                 return False, "Non-Medical Image: Color profile detected. Only grayscale Chest X-rays are supported."
         
-        # 2. Aspect Ratio Check (Image level)
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if len(image.shape) == 3 else image
+        
+        # 2. Background Ratio Check (CRITICAL: Rejects Limbs)
+        # Limb X-rays have a high proportion of pure black (air) background.
+        # Chest X-rays have the patient's body covering >80% of the frame.
+        black_pixels_ratio = np.sum(gray < 15) / gray.size
+        if black_pixels_ratio > 0.45:
+            # Rejects images where >45% is black background. Chest X-rays are usually <20% black.
+            return False, "Anatomy Mismatch: High background-to-subject ratio detected (Typical of limb/extremity imaging)."
+
+        # 3. Aspect Ratio Check (Image level)
         h_img, w_img = image.shape[:2]
         img_ratio = h_img / w_img
         if img_ratio < 0.6 or img_ratio > 1.7:
              return False, "Anatomy Mismatch: Aspect ratio incompatible with standard Chest X-ray views."
 
-        # 3. LUNG ANATOMY & SYMMETRY (Critical for Pitch: Rejects bone fractures)
+        # 4. LUNG ANATOMY & SYMMETRY (Rejects single central bones)
         try:
             mask = self.lung_segmenter.segment(image)
             lung_area = np.sum(mask > 0) / (mask.shape[0] * mask.shape[1])
             
-            # 3a. Minimum Area Check
+            # 4a. Minimum Lung Area Check
             if lung_area < 0.18:
-                # Proper chest X-rays have >20% lung area.
                 return False, "Anatomy Mismatch: Insufficient lung volume detected. Calibrated for Chest X-rays only."
             
-            # 3b. Bilateral Symmetry Check (Chest X-rays have two lungs)
+            # 4b. Bilateral Symmetry Check
             mid = mask.shape[1] // 2
             left_half = mask[:, :mid]
             right_half = mask[:, mid:]
@@ -315,24 +322,25 @@ class PneumoniaPredictor:
             
             symmetry_ratio = min(left_area, right_area) / max(left_area, (right_area + 1e-6))
             
-            if symmetry_ratio < 0.4:
-                return False, "Anatomy Mismatch: Asymmetric structure detected. System identifies this as non-chest anatomy (e.g., limb fracture)."
+            # Limb bones are often asymmetric or perfectly central (leading to high symmetry but single blob)
+            if symmetry_ratio < 0.45: # Stricter
+                return False, "Anatomy Mismatch: Asymmetric structure detected. System identifies this as non-chest anatomy."
                 
-            # 3c. Anatomy Shape Check (Lungs are wide together, bones are narrow)
+            # 4c. Anatomical Width Check (Lungs are lateral)
             x, y, w_box, h_box = self.lung_segmenter.get_lung_bbox(mask)
             box_ratio = w_box / (h_box + 1e-6)
-            if box_ratio < 0.7:
-                # Legs/Arms are very tall and narrow (box_ratio < 0.5)
-                # Chest anatomy (both lungs) is usually wider (box_ratio 0.8 to 1.3)
+            if box_ratio < 0.75:
+                # Rejecting vertical columns (bones)
                 return False, "Anatomy Mismatch: Narrow vertical structure detected. Expected broader bilateral chest anatomy."
 
-            # 3d. Contour Check
+            # 4d. Dual Component Check
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             if len(contours) < 2:
-                return False, "Anatomy Mismatch: Single central structure detected. Calibrated for bilateral lung views."
+                # Chest X-rays must have 2 lung regions
+                return False, "Anatomy Mismatch: Single central structure detected. System requires bilateral lung visibility."
                 
         except Exception as e:
-            logger.warning(f"Integrity check logic error: {e}")
+            logger.warning(f"Integrity logic bypass: {e}")
             pass
              
         return True, "Valid Integrity"
