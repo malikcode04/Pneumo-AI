@@ -39,12 +39,17 @@ from src.services.db import init_db, add_scan, get_all_scans, delete_scan, updat
 # ... (rest of imports are fine, just fixing the specific import line if needed, but replace_file_content targetting the function is safer)
 
 
+if "current_view" not in st.session_state:
+    st.session_state.current_view = "Dashboard"
+if "sidebar_state" not in st.session_state:
+    st.session_state.sidebar_state = "expanded"
+
 # Page configuration
 st.set_page_config(
     page_title="Pneumo AI - Advanced Radiology",
     page_icon="🏥",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state=st.session_state.sidebar_state
 )
 
 # Load Custom CSS
@@ -62,8 +67,6 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "disclaimer_accepted" not in st.session_state:
     st.session_state.disclaimer_accepted = False
-if "current_view" not in st.session_state:
-    st.session_state.current_view = "Dashboard"
 
 # Initialize Backend
 init_db()  # Ensure database is initialized
@@ -153,7 +156,10 @@ def show_login():
                         st.error("Password must be at least 4 characters.")
                     else:
                         if create_user(new_user, new_pass):
-                            st.success("Account created! You can now login.")
+                            st.success("Account created! Logging you in...")
+                            st.session_state.authenticated = True
+                            st.session_state.username = new_user
+                            st.rerun()
                         else:
                             st.error("Username already exists.")
 
@@ -198,10 +204,12 @@ def render_sidebar():
         
         if st.button("📊 Dashboard", use_container_width=True):
              st.session_state.current_view = "Dashboard"
+             st.session_state.sidebar_state = "expanded"
              st.rerun()
 
         if st.button("🔍 New Analysis", use_container_width=True):
             st.session_state.current_view = "Analysis"
+            st.session_state.sidebar_state = "collapsed"
             st.rerun()
         
         st.markdown("---")
