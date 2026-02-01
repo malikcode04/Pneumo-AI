@@ -280,36 +280,59 @@ class PneumoniaPredictor:
 
     def _validate_medical_integrity(self, image: np.ndarray) -> tuple:
         """
-        Validates if the image is a standard grayscale Chest X-ray with lung anatomy.
+        Validates if the image is a standard grayscale Chest X-ray with bilateral lung anatomy.
         Returns (is_valid, reason)
         """
         # 1. Grayscale check
         if len(image.shape) == 3:
             std_dev = np.std(image, axis=2).mean()
             if std_dev > 15: 
-                return False, "Image appears to be non-medical (Color profile detected, expected grayscale Chest X-ray)"
+                return False, "Non-Medical Image: Color profile detected. Only grayscale Chest X-rays are supported."
         
-        # 2. Histogram variance check (Diagnostic quality)
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if len(image.shape) == 3 else image
-        if np.std(gray) < 25:
-            return False, "Low diagnostic information (Image is too flat or contains mostly noise)"
-            
-        # 3. Aspect Ratio Check
-        h, w = image.shape[:2]
-        ratio = h / w
-        if ratio < 0.6 or ratio > 1.7:
-             return False, "Non-standard anatomy (Aspect ratio incompatible with standard Chest X-ray views)"
+        # 2. Aspect Ratio Check (Image level)
+        h_img, w_img = image.shape[:2]
+        img_ratio = h_img / w_img
+        if img_ratio < 0.6 or img_ratio > 1.7:
+             return False, "Anatomy Mismatch: Aspect ratio incompatible with standard Chest X-ray views."
 
-        # 4. LUNG DETECTION (Critical for Pitch: Rejects bone fractures)
-        # We use the segmenter to see if there is any lung-like structure
+        # 3. LUNG ANATOMY & SYMMETRY (Critical for Pitch: Rejects bone fractures)
         try:
             mask = self.lung_segmenter.segment(image)
             lung_area = np.sum(mask > 0) / (mask.shape[0] * mask.shape[1])
-            # Standard chest X-rays have at least 15-20% lung area. 
-            # Bone fractures or hands will have 0% or very fragmented area.
-            if lung_area < 0.12:
-                return False, "Anatomy Mismatch: No significant lung structures detected. System is calibrated for Chest X-rays only."
-        except:
-            pass # Fallback to other checks if segmenter fails
+            
+            # 3a. Minimum Area Check
+            if lung_area < 0.18:
+                # Proper chest X-rays have >20% lung area.
+                return False, "Anatomy Mismatch: Insufficient lung volume detected. Calibrated for Chest X-rays only."
+            
+            # 3b. Bilateral Symmetry Check (Chest X-rays have two lungs)
+            mid = mask.shape[1] // 2
+            left_half = mask[:, :mid]
+            right_half = mask[:, mid:]
+            
+            left_area = np.sum(left_half > 0)
+            right_area = np.sum(right_half > 0)
+            
+            symmetry_ratio = min(left_area, right_area) / max(left_area, (right_area + 1e-6))
+            
+            if symmetry_ratio < 0.4:
+                return False, "Anatomy Mismatch: Asymmetric structure detected. System identifies this as non-chest anatomy (e.g., limb fracture)."
+                
+            # 3c. Anatomy Shape Check (Lungs are wide together, bones are narrow)
+            x, y, w_box, h_box = self.lung_segmenter.get_lung_bbox(mask)
+            box_ratio = w_box / (h_box + 1e-6)
+            if box_ratio < 0.7:
+                # Legs/Arms are very tall and narrow (box_ratio < 0.5)
+                # Chest anatomy (both lungs) is usually wider (box_ratio 0.8 to 1.3)
+                return False, "Anatomy Mismatch: Narrow vertical structure detected. Expected broader bilateral chest anatomy."
+
+            # 3d. Contour Check
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if len(contours) < 2:
+                return False, "Anatomy Mismatch: Single central structure detected. Calibrated for bilateral lung views."
+                
+        except Exception as e:
+            logger.warning(f"Integrity check logic error: {e}")
+            pass
              
         return True, "Valid Integrity"
